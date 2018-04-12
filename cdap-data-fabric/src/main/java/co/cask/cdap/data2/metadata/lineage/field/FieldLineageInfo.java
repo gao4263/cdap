@@ -14,7 +14,7 @@
  * the License.
  */
 
-package co.cask.cdap.lineage.field;
+package co.cask.cdap.data2.metadata.lineage.field;
 
 import co.cask.cdap.api.lineage.field.EndPoint;
 import co.cask.cdap.api.lineage.field.InputField;
@@ -23,7 +23,7 @@ import co.cask.cdap.api.lineage.field.OperationType;
 import co.cask.cdap.api.lineage.field.ReadOperation;
 import co.cask.cdap.api.lineage.field.TransformOperation;
 import co.cask.cdap.api.lineage.field.WriteOperation;
-import co.cask.cdap.lineage.field.codec.OperationTypeAdapter;
+import co.cask.cdap.proto.codec.OperationTypeAdapter;
 import com.google.common.base.Charsets;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
@@ -68,6 +68,12 @@ public class FieldLineageInfo {
   // For each (EndPoint,Field) for the destination we maintain the incoming summary i.e.
   // combination of (EndPoint,Field) which were responsible for generating it.
   private transient Map<EndPointField, Set<EndPointField>> incomingSummary;
+
+  // Source endpoints in the lineage info
+  private transient Set<EndPoint> sources;
+
+  // Destination endpoints in the lineage info
+  private transient Set<EndPoint> destinations;
 
   private long checksum;
 
@@ -178,6 +184,40 @@ public class FieldLineageInfo {
       incomingSummary = computeIncomingSummary();
     }
     return incomingSummary;
+  }
+
+  /**
+   * @return all {@link EndPoint}s representing the source for read operations
+   */
+  public Set<EndPoint> getSources() {
+    if (sources == null) {
+      populateSourcesAndDestinations();
+    }
+    return sources;
+  }
+
+  /**
+   * @return all {@link EndPoint}s representing the destination for write operations
+   */
+  public Set<EndPoint> getDestinations() {
+    if (destinations == null) {
+      populateSourcesAndDestinations();
+    }
+    return destinations;
+  }
+
+  private void populateSourcesAndDestinations() {
+    sources = new HashSet<>();
+    destinations = new HashSet<>();
+    for (Operation operation : operations) {
+      if (OperationType.READ == operation.getType()) {
+        ReadOperation read = (ReadOperation) operation;
+        sources.add(read.getSource());
+      } else if (OperationType.WRITE == operation.getType()) {
+        WriteOperation write = (WriteOperation) operation;
+        destinations.add(write.getDestination());
+      }
+    }
   }
 
   private long computeChecksum() {
@@ -311,5 +351,25 @@ public class FieldLineageInfo {
         FP_TABLE[i] = fp;
       }
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+
+    if (!(o instanceof FieldLineageInfo)) {
+      return false;
+    }
+
+    FieldLineageInfo info = (FieldLineageInfo) o;
+    return checksum == info.checksum;
+  }
+
+
+  @Override
+  public int hashCode() {
+    return (int) (checksum ^ (checksum >>> 32));
   }
 }

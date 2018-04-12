@@ -16,6 +16,12 @@
 
 package co.cask.cdap.metadata;
 
+import co.cask.cdap.api.lineage.field.EndPoint;
+import co.cask.cdap.api.lineage.field.InputField;
+import co.cask.cdap.api.lineage.field.Operation;
+import co.cask.cdap.api.lineage.field.ReadOperation;
+import co.cask.cdap.api.lineage.field.TransformOperation;
+import co.cask.cdap.api.lineage.field.WriteOperation;
 import co.cask.cdap.api.workflow.NodeStatus;
 import co.cask.cdap.api.workflow.Value;
 import co.cask.cdap.api.workflow.WorkflowToken;
@@ -26,6 +32,11 @@ import co.cask.cdap.data2.dataset2.DatasetFramework;
 import co.cask.cdap.data2.metadata.lineage.AccessType;
 import co.cask.cdap.data2.metadata.lineage.DefaultLineageStoreReader;
 import co.cask.cdap.data2.metadata.lineage.LineageStoreReader;
+import co.cask.cdap.data2.metadata.lineage.field.DefaultFieldLineageReader;
+import co.cask.cdap.data2.metadata.lineage.field.FieldLineageInfo;
+import co.cask.cdap.data2.metadata.lineage.field.FieldLineageReader;
+import co.cask.cdap.data2.metadata.lineage.field.ProgramRunOperations;
+import co.cask.cdap.data2.metadata.writer.FieldLineageWriter;
 import co.cask.cdap.data2.metadata.writer.LineageWriter;
 import co.cask.cdap.data2.metadata.writer.MessagingLineageWriter;
 import co.cask.cdap.data2.registry.BasicUsageRegistry;
@@ -51,9 +62,11 @@ import co.cask.cdap.proto.id.WorkflowId;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -79,6 +92,7 @@ public class MetadataSubscriberServiceTest extends AppFabricTestBase {
   @Test
   public void testSubscriber() throws InterruptedException, ExecutionException, TimeoutException {
     DatasetId lineageDatasetId = NamespaceId.DEFAULT.dataset("testSubscriberLineage");
+    DatasetId fieldLineageDatasetId = NamespaceId.DEFAULT.dataset("testSubscriberFieldLineage");
     DatasetId usageDatasetId = NamespaceId.DEFAULT.dataset("testSubscriberUsage");
 
     // Write out some lineage information
@@ -94,6 +108,44 @@ public class MetadataSubscriberServiceTest extends AppFabricTestBase {
     Set<NamespacedEntityId> entities = lineageReader.getEntitiesForRun(run1);
     Assert.assertTrue(entities.isEmpty());
 
+    // Write the field level lineage
+    FieldLineageWriter fieldLineageWriter = getInjector().getInstance(MessagingLineageWriter.class);
+    ProgramRunId spark1Run1 = spark1.run(RunIds.generate());
+    ReadOperation read = new ReadOperation("read", "some read", EndPoint.of("ns", "endpoint1"), "offset", "body");
+    TransformOperation parse = new TransformOperation("parse", "parse body",
+                                                      Arrays.asList(InputField.of("read", "body")), "name", "address");
+    WriteOperation write = new WriteOperation("write", "write data", EndPoint.of("ns", "endpoint2"),
+                                              Arrays.asList(InputField.of("read", "offset"),
+                                                            InputField.of("parse", "name"),
+                                                            InputField.of("parse", "body")));
+
+    List<Operation> operations = new ArrayList<>();
+    operations.add(read);
+    operations.add(write);
+    operations.add(parse);
+    FieldLineageInfo info1 = new FieldLineageInfo(operations);
+    fieldLineageWriter.write(spark1Run1, info1);
+
+    ProgramRunId spark1Run2 = spark1.run(RunIds.generate());
+    fieldLineageWriter.write(spark1Run2, info1);
+
+    List<Operation> operations2 = new ArrayList<>();
+    read = new ReadOperation("read", "some read", EndPoint.of("ns", "endpoint1"), "offset", "body");
+    operations2.add(read);
+    parse = new TransformOperation("parse", "parse body",
+                                                      Arrays.asList(InputField.of("read", "body")), "name", "address");
+    operations2.add(parse);
+    TransformOperation normalize = new TransformOperation("normalize", "normalize address",
+                                                          Arrays.asList(InputField.of("parse", "address")), "address");
+    operations2.add(normalize);
+    write = new WriteOperation("write", "write data", EndPoint.of("ns", "endpoint2"),
+                                              Arrays.asList(InputField.of("read", "offset"),
+                                                            InputField.of("parse", "name"),
+                                                            InputField.of("parse", "body")));
+    operations2.add(write);
+    FieldLineageInfo info2 = new FieldLineageInfo(operations2);
+    fieldLineageWriter.write(spark1Run2, info2);
+
     // Emit some usages
     UsageWriter usageWriter = getInjector().getInstance(MessagingUsageWriter.class);
     usageWriter.register(spark1, dataset1);
@@ -107,6 +159,7 @@ public class MetadataSubscriberServiceTest extends AppFabricTestBase {
     MetadataSubscriberService subscriberService = getInjector().getInstance(MetadataSubscriberService.class);
     subscriberService
       .setLineageDatasetId(lineageDatasetId)
+      .setFieldLineageDatasetId(fieldLineageDatasetId)
       .setUsageDatasetId(usageDatasetId)
       .startAndWait();
 
@@ -124,6 +177,19 @@ public class MetadataSubscriberServiceTest extends AppFabricTestBase {
 
       // There shouldn't be any lineage for the "spark1" program, as only usage has been emitted.
       Assert.assertTrue(lineageReader.getRelations(spark1, 0L, Long.MAX_VALUE, x -> true).isEmpty());
+
+      FieldLineageReader fieldLineageReader = new DefaultFieldLineageReader(getDatasetFramework(), getTxClient(),
+                                                                            fieldLineageDatasetId);
+
+      Set<ProgramRunOperations> expectedSet = new HashSet<>();
+      expectedSet.add(new ProgramRunOperations(info1.getChecksum(), Collections.singleton(spark1Run1),
+                                               new HashSet<>(operations)));
+      expectedSet.add(new ProgramRunOperations(info2.getChecksum(), Collections.singleton(spark1Run2),
+                                               new HashSet<>(operations2)));
+
+      Tasks.waitFor(expectedSet, () -> fieldLineageReader.getIncomingOperations(EndPoint.of("ns", "endpoint2"), 1L,
+                                                                                Long.MAX_VALUE - 1),
+                    10, TimeUnit.SECONDS, 100, TimeUnit.MILLISECONDS);
 
       // Verifies usage has been written
       Set<EntityId> expectedUsage = new HashSet<>(Arrays.asList(dataset1, dataset3));
