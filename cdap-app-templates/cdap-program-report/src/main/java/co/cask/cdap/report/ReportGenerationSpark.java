@@ -248,7 +248,6 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         }
         // the report generation failed because the Spark program run was killed
         return new ReportGenerationInfo(metaInfo, "The report generation was killed", reportRequest, null);
-
       }
       // if the report is neither COMPLETED nor FAILED, return response with error and summary as null
       return new ReportGenerationInfo(metaInfo, null, reportRequest, null);
@@ -291,7 +290,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * @throws Exception if fails to get the status of the report or fails to access the file with report save request
      */
     private ReportMetaInfo getReportMetaInfo(String reportId, Location reportIdDir,
-                                                    ReportGenerationRequest generationRequest) throws Exception {
+                                             ReportGenerationRequest generationRequest) throws Exception {
       // Get the creation time from the report ID, which is time based UUID
       long creationTime = ReportIds.getTime(reportId, TimeUnit.SECONDS);
       ReportStatus status = getReportStatus(reportIdDir);
@@ -559,7 +558,6 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         reportRequest = decodeRequestBody(requestJson, REPORT_GENERATION_REQUEST_TYPE);
         reportRequest.validate();
       } catch (IllegalArgumentException e) {
-        LOG.error("Invalid report generation request {}.", requestJson, e);
         responder.sendError(400, e.getMessage());
         return;
       }
