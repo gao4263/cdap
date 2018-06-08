@@ -108,6 +108,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
     private static final String DEFAULT_LIMIT = "10000";
     private static final String READ_LIMIT = "readLimit";
     private static final String START_FILE = "_START";
+    private static final String RUN_ID_FILE = "_RUN_";
     private static final String FAILURE_FILE = "_FAILURE";
     private static final String SAVED_FILE = "_SAVED";
     // report files will expire after 48 hours after they are generated
@@ -228,7 +229,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * @return the report generation information of the given report id
      * @throws Exception
      */
-    private static ReportGenerationInfo getReportGenerationInfo(String reportId, Location reportIdDir)
+    private ReportGenerationInfo getReportGenerationInfo(String reportId, Location reportIdDir)
       throws Exception {
       ReportGenerationRequest reportRequest = getReportRequest(reportIdDir);
       ReportMetaInfo metaInfo = getReportMetaInfo(reportId, reportIdDir, reportRequest);
@@ -241,7 +242,13 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
       }
       // if the report generation failed, read the error from _FAILURE file and include it in the response
       if (ReportStatus.FAILED.equals(metaInfo.getStatus())) {
-        return new ReportGenerationInfo(metaInfo, readStringFromFile(reportIdDir, FAILURE_FILE), reportRequest, null);
+        // get the reason of failure from _FAILURE file if it exists
+        if (reportIdDir.append(FAILURE_FILE).exists()) {
+          return new ReportGenerationInfo(metaInfo, readStringFromFile(reportIdDir, FAILURE_FILE), reportRequest, null);
+        }
+        // the report generation failed because the Spark program run was killed
+        return new ReportGenerationInfo(metaInfo, "The report generation was killed", reportRequest, null);
+
       }
       // if the report is neither COMPLETED nor FAILED, return response with error and summary as null
       return new ReportGenerationInfo(metaInfo, null, reportRequest, null);
@@ -283,7 +290,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * @return the meta information of the report
      * @throws Exception if fails to get the status of the report or fails to access the file with report save request
      */
-    private static ReportMetaInfo getReportMetaInfo(String reportId, Location reportIdDir,
+    private ReportMetaInfo getReportMetaInfo(String reportId, Location reportIdDir,
                                                     ReportGenerationRequest generationRequest) throws Exception {
       // Get the creation time from the report ID, which is time based UUID
       long creationTime = ReportIds.getTime(reportId, TimeUnit.SECONDS);
@@ -552,6 +559,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         reportRequest = decodeRequestBody(requestJson, REPORT_GENERATION_REQUEST_TYPE);
         reportRequest.validate();
       } catch (IllegalArgumentException e) {
+        LOG.error("Invalid report generation request {}.", requestJson, e);
         responder.sendError(400, e.getMessage());
         return;
       }
@@ -570,10 +578,23 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         responder.sendError(500, "Failed to create a _START file for report " + reportId);
         return;
       }
+      // Create a file to save the run id of the current Spark program run
+      Location runIdFile = reportIdDir.append(RUN_ID_FILE + getContext().getRunId().getId());
+      if (!runIdFile.createNew()) {
+        reportIdDir.delete();
+        responder.sendError(500, "Failed to create a file to save run id for " + reportId);
+        return;
+      }
       // Save the report generation request in the _START file
       try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(startFile.getOutputStream(),
                                                                        StandardCharsets.UTF_8), true)) {
         writer.write(requestJson);
+      } catch (Exception e) {
+        reportIdDir.delete();
+        LOG.error("Failed to write to _START file for report %s" + reportId, e);
+        responder.sendError(500, String.format("Failed to write to _START file for report %s with error %s",
+          reportId, e.getMessage()));
+        return;
       }
       LOG.debug("Wrote to startFile {}", startFile.toURI());
       // Generate the report asynchronously
@@ -709,13 +730,15 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * @param reportIdDir the base directory with report ID as directory name
      * @return status of the report generation
      */
-    private static ReportStatus getReportStatus(Location reportIdDir) throws Exception {
+    private ReportStatus getReportStatus(Location reportIdDir) throws Exception {
       // if the report is completed but has expired, return EXPIRED as its status too
       if (reportIdDir.append(LocationName.SUCCESS_FILE).exists() &&
         getExpiryTimeMillis(reportIdDir) < System.currentTimeMillis()) {
         return ReportStatus.EXPIRED;
       }
-      if (reportIdDir.append(FAILURE_FILE).exists()) {
+      // if there is a _FAILURE file or the report generation was killed in a previous run, the report is failed
+      if (reportIdDir.append(FAILURE_FILE).exists() ||
+           !reportIdDir.append(RUN_ID_FILE + getContext().getRunId()).exists()) {
         return ReportStatus.FAILED;
       }
       if (reportIdDir.append(LocationName.SUCCESS_FILE).exists()) {
