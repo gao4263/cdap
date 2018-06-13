@@ -16,6 +16,9 @@
 
 package co.cask.cdap.internal.app.runtime.monitor;
 
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
+
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -30,6 +33,11 @@ public class MonitorConsumeRequest {
   public MonitorConsumeRequest(@Nullable String messageId, int limit) {
     this.messageId = messageId;
     this.limit = limit;
+  }
+
+  public MonitorConsumeRequest(GenericRecord record) {
+    this.messageId = String.valueOf(record.get("messageId"));
+    this.limit = (int) record.get("limit");
   }
 
   @Nullable
@@ -58,5 +66,30 @@ public class MonitorConsumeRequest {
   @Override
   public int hashCode() {
     return Objects.hash(messageId, limit);
+  }
+
+  public GenericRecord toGenericRecord() {
+    GenericRecord record = new GenericData.Record(MonitorSchemas.V1.MonitorConsumeRequest.SCHEMA.getValueType());
+    record.put("messageId", messageId);
+    record.put("limit", limit);
+    return record;
+  }
+
+  /**
+   * Util method to provide messageId from generic record
+   */
+  @Nullable
+  public static String getMessageId(GenericRecord record) {
+    if (record.get("messageId") == null) {
+      return null;
+    }
+    return String.valueOf(record.get("messageId"));
+  }
+
+  /**
+   * Util method to provide limit from generic record
+   */
+  public static int getLimit(GenericRecord record) {
+    return (int) record.get("limit");
   }
 }

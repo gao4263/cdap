@@ -20,15 +20,23 @@ import co.cask.cdap.common.ServiceUnavailableException;
 import co.cask.cdap.security.tools.HttpsEnabler;
 import co.cask.common.http.HttpRequestConfig;
 import com.google.common.io.CharStreams;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import com.google.common.net.HttpHeaders;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DatumWriter;
+import org.apache.avro.io.Decoder;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.io.Encoder;
+import org.apache.avro.io.EncoderFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.io.Reader;
-import java.io.Writer;
-import java.lang.reflect.Type;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -37,6 +45,8 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
 import javax.net.ssl.HttpsURLConnection;
 
@@ -44,14 +54,11 @@ import javax.net.ssl.HttpsURLConnection;
  * Provides client side logic to interact with the network API exposed by {@link RuntimeMonitorServer}.
  */
 public final class RuntimeMonitorClient {
-
-  private static final Gson GSON = new Gson();
-  private static final Type MAP_STRING_MESSAGE_TYPE = new TypeToken<Map<String, Deque<MonitorMessage>>>() { }.getType();
-
   private final URI baseURI;
   private final HttpRequestConfig requestConfig;
   private final KeyStore keyStore;
   private final KeyStore trustStore;
+
 
   public RuntimeMonitorClient(String hostname, int port, HttpRequestConfig requestConfig,
                               KeyStore keyStore, KeyStore trustStore) {
@@ -76,19 +83,73 @@ public final class RuntimeMonitorClient {
     try {
       urlConn.setDoOutput(true);
       urlConn.setRequestMethod("POST");
-      try (Writer writer = new OutputStreamWriter(urlConn.getOutputStream(), StandardCharsets.UTF_8)) {
-        GSON.toJson(request, writer);
+      urlConn.setRequestProperty(HttpHeaders.CONTENT_TYPE, "avro/binary");
+
+      try (OutputStream os = urlConn.getOutputStream()) {
+        encodeRequest(request, os);
       }
 
       throwIfNotOK(urlConn.getResponseCode(), urlConn);
-      try (Reader reader = new InputStreamReader(urlConn.getInputStream(), StandardCharsets.UTF_8)) {
-        return GSON.fromJson(reader, MAP_STRING_MESSAGE_TYPE);
+
+      try (InputStream is = urlConn.getInputStream()) {
+        return decodeResponse(is);
       }
     } catch (ConnectException e) {
       throw new ServiceUnavailableException("runtime.monitor", e);
     } finally {
       releaseConnection(urlConn);
     }
+  }
+
+  /**
+   * Encode request to avro binary format.
+   * @param topicsToRequest topic requests to be
+   * @param outputStream Outputstream to write to
+   * @throws IOException
+   */
+  public static void encodeRequest(Map<String, MonitorConsumeRequest> topicsToRequest,
+                                   OutputStream outputStream) throws IOException {
+    Encoder encoder = EncoderFactory.get().directBinaryEncoder(outputStream, null);
+    encoder.writeMapStart();
+    encoder.setItemCount(topicsToRequest.size());
+
+    DatumWriter<GenericRecord> requestDatumWriter = new GenericDatumWriter<>(
+      MonitorSchemas.V1.MonitorConsumeRequest.SCHEMA.getValueType());
+
+    for (Map.Entry<String, MonitorConsumeRequest> requestEntry : topicsToRequest.entrySet()) {
+      encoder.startItem();
+      encoder.writeString(requestEntry.getKey());
+      requestDatumWriter.write(requestEntry.getValue().toGenericRecord(), encoder);
+    }
+
+    encoder.writeMapEnd();
+  }
+
+  /**
+   * Decodes avro binary response
+   */
+  public static Map<String, Deque<MonitorMessage>> decodeResponse(InputStream is) throws IOException {
+    Decoder decoder = DecoderFactory.get().directBinaryDecoder(is, null);
+    GenericRecord reuse = new GenericData.Record(MonitorSchemas.V1.MonitorResponse.SCHEMA.getValueType()
+                                                   .getElementType());
+    DatumReader<GenericRecord> responseDatumReader = new GenericDatumReader<>(
+      MonitorSchemas.V1.MonitorResponse.SCHEMA.getValueType().getElementType());
+
+    Map<String, Deque<MonitorMessage>> decodedMessages = new HashMap<>();
+    long entries = decoder.readMapStart();
+    while (entries > 0) {
+      String topicConfig = decoder.readString();
+      decodedMessages.put(topicConfig, new LinkedList<>());
+      long messages = decoder.readArrayStart();
+      while (messages > 0) {
+        responseDatumReader.read(reuse, decoder);
+        decodedMessages.get(topicConfig).add(new MonitorMessage(reuse));
+        messages--;
+      }
+      entries--;
+    }
+
+    return decodedMessages;
   }
 
   /**
