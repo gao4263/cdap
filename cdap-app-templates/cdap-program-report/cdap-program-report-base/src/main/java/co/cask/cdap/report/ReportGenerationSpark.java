@@ -54,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -61,6 +62,9 @@ import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Iterator;
@@ -73,8 +77,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import javax.annotation.Nullable;
+import javax.crypto.Cipher;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -82,6 +88,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
+
 import static co.cask.cdap.report.util.Constants.LocationName;
 
 /**
@@ -90,6 +97,7 @@ import static co.cask.cdap.report.util.Constants.LocationName;
 public class ReportGenerationSpark extends AbstractExtendedSpark {
   private static final Gson GSON = new GsonBuilder()
     .registerTypeAdapter(Filter.class, new FilterDeserializer())
+    .disableHtmlEscaping()
     .create();
   private static final ExecutorService REPORT_EXECUTOR =
     new ThreadPoolExecutor(0, 3, 60L, TimeUnit.SECONDS,
@@ -120,9 +128,12 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
     private static final String SAVED_FILE = "_SAVED";
     // report files will expire after 48 hours after they are generated
     private static final long VALID_DURATION_MILLIS = TimeUnit.DAYS.toMillis(2);
+    private static final String KEY_FILE_NAME = "security_key";
 
     private int readLimit;
     private SQLContext sqlContext;
+    private Cipher encryptionCipher;
+    private Cipher decryptionCipher;
 
     @Override
     public void initialize(SparkHttpServiceContext context) throws Exception {
@@ -130,6 +141,27 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
       sqlContext = new SQLContext(getContext().getSparkContext());
       String readLimitString = context.getRuntimeArguments().get(READ_LIMIT);
       readLimit = readLimitString == null ? 10000 : Integer.valueOf(readLimitString);
+    }
+
+    /**
+     * Read the secure key file to read the security key bytes and initialize Cipher using AES and the mode
+     * encryption/decryption is based on the parameter cipherMode.
+     *
+     * @param cipherMode
+     * @return Initialized Cipher
+     * @throws IOException If the key file doesn't exist or if there are any exception while reading the file
+     */
+    private Cipher initializeCipher(int cipherMode) throws IOException, NoSuchPaddingException,
+            NoSuchAlgorithmException, InvalidKeyException {
+      Location keyLocation = getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(KEY_FILE_NAME);
+      if (!keyLocation.exists()) {
+        throw new FileNotFoundException("Security Key file doesn't exist, cannot share reports");
+      }
+      byte[] keyBytes = ByteStreams.toByteArray(keyLocation.getInputStream());
+      Cipher cipher = Cipher.getInstance("AES");
+      SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, "AES");
+      cipher.init(cipherMode, secretKeySpec);
+      return cipher;
     }
 
     @GET
@@ -208,7 +240,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         reportIdDir = getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(userName).append(reportId);
         if (reportIdDir.exists()) {
           String shareId = encodeShareId(new ReportIdentifier(userName, reportId));
-          responder.sendJson(new ShareId(shareId));
+          responder.sendJson(200, new ShareId(shareId), ShareId.class, GSON);
         } else {
           responder.sendError(500, String.format("Invalid report-id %s, report does not exist", reportId));
           return;
@@ -218,16 +250,29 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         responder.sendError(500, String.format("Failed to get location for report with id %s because of error: %s",
                 reportId, e.getMessage()));
         return;
+      } catch (GeneralSecurityException e) {
+        LOG.error("Failed due to security error while sharing {}", reportId, e);
+        responder.sendError(500, String.format("Failed due to security error while sharing: %s, %s",
+                reportId, e.getMessage()));
+        return;
       }
     }
 
-    private String encodeShareId(ReportIdentifier reportIdentifier) {
-      String response = GSON.toJson(reportIdentifier);
-      return Base64.getEncoder().encodeToString(response.getBytes());
+    private String encodeShareId(ReportIdentifier reportIdentifier) throws GeneralSecurityException, IOException {
+      byte[] response = GSON.toJson(reportIdentifier).getBytes();
+      if (encryptionCipher == null) {
+        encryptionCipher = initializeCipher(Cipher.ENCRYPT_MODE);
+      }
+      byte[] cipherReponse = encryptionCipher.doFinal(response);
+      return Base64.getUrlEncoder().encodeToString(cipherReponse);
     }
 
-    private ReportIdentifier decodeShareId(String shareId) throws UnsupportedEncodingException {
-      byte[] decodedBytes = Base64.getDecoder().decode(shareId);
+    private ReportIdentifier decodeShareId(String shareId) throws GeneralSecurityException, IOException {
+      byte[] decodedCipherBytes = Base64.getUrlDecoder().decode(shareId);
+      if (decryptionCipher == null) {
+        decryptionCipher = initializeCipher(Cipher.DECRYPT_MODE);
+      }
+      byte[]  decodedBytes = decryptionCipher.doFinal(decodedCipherBytes);
       String decodedString = new String(decodedBytes, 0, decodedBytes.length, UTF8_ENCODING);
       return GSON.fromJson(decodedString, ReportIdentifier.class);
     }
@@ -248,9 +293,9 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
       } catch (IllegalArgumentException iae) {
         responder.sendError(400, iae.getMessage());
         return;
-      } catch (UnsupportedEncodingException uee) {
+      } catch (GeneralSecurityException | IOException e) {
         responder.sendError(500, String.format(
-                "Error while decoding shareId %s, due to exception : ", shareId, uee.getMessage()));
+                "Error while decoding shareId %s, due to exception : ", shareId, e.getMessage()));
         return;
       }
 
@@ -544,7 +589,8 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      */
     private ReportIdentifier validateAndGetReportIdentifier(
             @Nullable String reportId, Map<String, List<String>> headers,
-            @Nullable String shareId) throws IllegalArgumentException, UnsupportedEncodingException {
+            @Nullable String shareId)
+      throws IllegalArgumentException, IOException, GeneralSecurityException {
       if (reportId == null && shareId == null) {
         throw new IllegalArgumentException("Either reportId or sharedId must be provided, missing both");
       }
@@ -595,12 +641,11 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
       } catch (IllegalArgumentException iae) {
         responder.sendError(400, iae.getMessage());
         return;
-      } catch (UnsupportedEncodingException uee) {
+      } catch (UnsupportedEncodingException | GeneralSecurityException e) {
         responder.sendError(500, String.format(
-                "Error while decoding shareId %s, due to exception : ", shareId, uee.getMessage()));
+                "Error while decoding shareId %s, due to exception : ", shareId, e.getMessage()));
         return;
       }
-
       Location reportIdDir;
       try {
         reportIdDir = getLocationFromReportIdentifier(reportIdentifier);
