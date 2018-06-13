@@ -129,7 +129,6 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
     private static final String SAVED_FILE = "_SAVED";
     // report files will expire after 48 hours after they are generated
     private static final long VALID_DURATION_MILLIS = TimeUnit.DAYS.toMillis(2);
-    private static final String KEY_FILE_NAME = "security_key";
 
     private int readLimit;
     private SQLContext sqlContext;
@@ -154,7 +153,8 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      */
     private Cipher initializeCipher(int cipherMode) throws IOException, NoSuchPaddingException,
       NoSuchAlgorithmException, InvalidKeyException {
-      Location keyLocation = getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(KEY_FILE_NAME);
+      Location keyLocation =
+        getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(SparkPersistRunRecordMain.KEY_FILE_NAME);
       if (!keyLocation.exists()) {
         throw new FileNotFoundException("Security Key file doesn't exist, cannot share reports");
       }
@@ -255,11 +255,11 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         encryptionCipher = initializeCipher(Cipher.ENCRYPT_MODE);
       }
       byte[] cipherReponse = encryptionCipher.doFinal(response);
-      return Base64.getUrlEncoder().encodeToString(cipherReponse);
+      return Base64.getEncoder().encodeToString(cipherReponse);
     }
 
     private ReportIdentifier decodeShareId(String shareId) throws GeneralSecurityException, IOException {
-      byte[] decodedCipherBytes = Base64.getUrlDecoder().decode(shareId);
+      byte[] decodedCipherBytes = Base64.getDecoder().decode(shareId);
       if (decryptionCipher == null) {
         decryptionCipher = initializeCipher(Cipher.DECRYPT_MODE);
       }

@@ -40,10 +40,11 @@ import javax.crypto.KeyGenerator;
  * spark main class, starts and waits for the tms subscriber thread to read run record meta and write to files
  */
 public class SparkPersistRunRecordMain implements JavaSparkMain {
+  public static final String KEY_FILE_NAME = "security_key";
+
   private TMSSubscriber tmsSubscriber;
   private static final Logger LOG = LoggerFactory.getLogger(SparkPersistRunRecordMain.class);
   private static final SampledLogging SAMPLED_LOGGING = new SampledLogging(LOG, 100);
-  private static final String KEY_FILE_NAME = "security_key";
   private static final String KEY_FILE_PERMISSION = "700";
 
   @Override
