@@ -19,15 +19,10 @@ import PropTypes from 'prop-types';
 import Popover from 'components/Popover';
 import IconSVG from 'components/IconSVG';
 import {connect} from 'react-redux';
-import {ReportsActions} from 'components/Reports/store/ReportsStore';
+import {ReportsActions, STATUS_OPTIONS} from 'components/Reports/store/ReportsStore';
 import StatusViewer from 'components/Reports/Customizer/StatusSelector/StatusViewer';
-
-const OPTIONS = [
-  'FAILED',
-  'COMPLETED',
-  'RUNNING',
-  'STOPPED'
-];
+import StatusMapper from 'services/StatusMapper';
+import T from 'i18n-react';
 
 class StatusPopoverView extends Component {
   static propTypes = {
@@ -72,19 +67,29 @@ class StatusPopoverView extends Component {
     document.body.click();
   };
 
+  // Setting selections to previous selections when the user clicks outside
+  onTogglePopover = (showPopover) => {
+    if (!showPopover) {
+      this.setState({
+        selections: this.props.selections
+      });
+    }
+  };
+
   render() {
     return (
       <Popover
-        target={StatusViewer}
+        target={StatusViewer.bind(null, this.state.selections)}
         className="status-selector-popover"
         placement="bottom"
         bubbleEvent={false}
         enableInteractionInPopover={true}
         injectOnToggle={true}
+        onTogglePopover={this.onTogglePopover}
       >
         <div className="options">
           {
-            OPTIONS.map((option) => {
+            STATUS_OPTIONS.map((option) => {
               return (
                 <div
                   className="option"
@@ -94,20 +99,19 @@ class StatusPopoverView extends Component {
                   <IconSVG name="icon-circle" className={option.toLowerCase()} />
 
                   <span>
-                    {option}
+                    {StatusMapper.lookupDisplayStatus(option)}
                   </span>
                 </div>
               );
             })
           }
         </div>
-
         <div className="action">
           <button
-            className="btn btn-link"
+            className="btn btn-primary"
             onClick={this.apply}
           >
-            Apply
+            {T.translate('commons.apply')}
           </button>
         </div>
       </Popover>

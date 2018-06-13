@@ -14,13 +14,18 @@
  * the License.
  */
 
-import React from 'react';
+import React, {Component} from 'react';
 import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import {GLOBALS} from 'services/global-constants';
 import {humanReadableDate, humanReadableDuration} from 'services/helpers';
 import {DefaultSelection} from 'components/Reports/store/ActionCreator';
 import difference from 'lodash/difference';
+import capitalize from 'lodash/capitalize';
+import StatusMapper from 'services/StatusMapper';
+import T from 'i18n-react';
+
+const PREFIX = 'features.Reports.Customizer.Options';
 
 require('./Runs.scss');
 
@@ -41,31 +46,36 @@ function getName(run) {
 function getType(run) {
   switch (run.artifactName) {
     case GLOBALS.etlDataPipeline:
-      return 'Batch Pipeline';
+      return T.translate('features.Reports.ReportsDetail.batch');
     case GLOBALS.etlDataStreams:
-      return 'Realtime Pipeline';
+      return T.translate('features.Reports.ReportsDetail.realtime');
     default:
       return run.programType;
   }
 }
 
 function renderHeader(headers) {
+  let nameLabel = T.translate('commons.nameLabel');
+  let typeLabel = T.translate('commons.typeLabel');
+
   return (
     <div className="grid-header">
       <div className="grid-row">
-        <div>
-          Name
+        <div title={nameLabel}>
+          {nameLabel}
         </div>
 
-        <div>
-          Type
+        <div title={typeLabel}>
+          {typeLabel}
         </div>
 
         {
           headers.map((head) => {
+            let headerLabel = T.translate(`${PREFIX}.${head}`);
+
             return (
-              <div>
-                {head}
+              <div title={headerLabel}>
+                {headerLabel}
               </div>
             );
           })
@@ -80,17 +90,19 @@ function renderBody(runs, headers) {
     <div className="grid-body">
       {
         runs.map((run, i) => {
+          let name = getName(run);
+          let type = getType(run);
           return (
             <div
               key={i}
               className="grid-row"
             >
-              <div>
-                {getName(run)}
+              <div title={name}>
+                {name}
               </div>
 
-              <div>
-                {getType(run)}
+              <div title={type}>
+                {type}
               </div>
 
               {
@@ -101,22 +113,39 @@ function renderBody(runs, headers) {
                     value = humanReadableDate(value);
                   }
 
-                  if (head === 'duration') {
+                  else if (head === 'duration') {
                     value = humanReadableDuration(value);
                   }
 
-                  if (head === 'runtimeArgs') {
-                    value = JSON.stringify(value, null, 2);
+                  else if (head === 'status') {
+                    value = StatusMapper.lookupDisplayStatus(value);
+                  }
+
+                  else if (head === 'startMethod') {
+                    value = capitalize(value);
+                  }
+
+                  else if (head === 'runtimeArgs') {
+                    let keyValuePairs = Object.entries(value).map(keyValuePair => {
+                      return `${keyValuePair[0]} = ${keyValuePair[1]}`;
+                    });
+
+                    value = keyValuePairs.join(', ');
 
                     return (
                       <div>
-                        <pre>{value}</pre>
+                        <pre
+                          title={value}
+                          className="runtime-args-row"
+                        >
+                          {value}
+                        </pre>
                       </div>
                     );
                   }
 
                   return (
-                    <div>
+                    <div title={value || '--'}>
                       {value || '--'}
                     </div>
                   );
@@ -138,25 +167,69 @@ function getHeaders(request) {
   return headers;
 }
 
-function RunsView({runs, request}) {
-  let headers = getHeaders(request);
+class RunsView extends Component {
+  static propTypes = {
+    runs: PropTypes.array,
+    request: PropTypes.object
+  };
 
-  return (
-    <div className="reports-runs-container">
-      <div className="grid-wrapper">
-        <div className="grid grid-container">
-          {renderHeader(headers)}
-          {renderBody(runs, headers)}
+  componentDidUpdate() {
+    this.adjustGridColumnsWidth(this.props.request);
+  }
+
+  adjustGridColumnsWidth(request) {
+    let headers = getHeaders(request);
+
+    if (!headers.length) {
+      return;
+    }
+
+    let runtimeArgsIndex = headers.indexOf('runtimeArgs');
+
+    if (runtimeArgsIndex === -1) {
+      return;
+    }
+
+    /*
+      This is to make the width of the 'runtimeArgs' column constant, while
+      making the others dynamic. We have to do this in Javascript since we don't
+      know in advance what index the 'runtimeArgs' column will be at. For example,
+      if the 'runtimeArgs' column is the fifth one (index 4), and there are 7
+      columns in total, then the css of the grid-row element would be:
+      grid-template-columns: repeat(4, minmax(10px, 1fr)) 300px repeat(2, minmax(10px, 1fr))
+    */
+    const reportRunsGridRowClass = ".reports-runs-container .grid.grid-container .grid-row";
+    const reportRunsGridRowElements = document.querySelectorAll(reportRunsGridRowClass);
+    const dynamicColWidth = 'minmax(10px, 1fr)';
+    const runtimeArgsColWidth = '300px';
+    const numColsAfterRuntimeArgsCol = headers.length - runtimeArgsIndex - 1;
+    const gridTemplateColumnsStyle =
+      `repeat(${runtimeArgsIndex + 2}, ${dynamicColWidth})
+       ${runtimeArgsColWidth}
+       repeat(${numColsAfterRuntimeArgsCol}, ${dynamicColWidth})
+      `;
+
+    reportRunsGridRowElements.forEach(gridRow => {
+      gridRow.style.gridTemplateColumns = gridTemplateColumnsStyle;
+    });
+  }
+
+  render() {
+    let {runs, request} = this.props;
+    let headers = getHeaders(request);
+
+    return (
+      <div className="reports-runs-container">
+        <div className="grid-wrapper">
+          <div className="grid grid-container">
+            {renderHeader(headers)}
+            {renderBody(runs, headers)}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 }
-
-RunsView.propTypes = {
-  runs: PropTypes.array,
-  request: PropTypes.object
-};
 
 const mapStateToProps = (state) => {
   return {
