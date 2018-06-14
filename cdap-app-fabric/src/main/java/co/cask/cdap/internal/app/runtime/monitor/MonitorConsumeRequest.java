@@ -35,6 +35,10 @@ public class MonitorConsumeRequest {
     this.limit = limit;
   }
 
+  /**
+   * Extracts messageId and limit from {@link GenericRecord} and creates MonitorConsumeRequest from it
+   * @param record Generic record from which fields needs to be extracted
+   */
   public MonitorConsumeRequest(GenericRecord record) {
     this.messageId = String.valueOf(record.get("messageId"));
     this.limit = (int) record.get("limit");
@@ -68,28 +72,13 @@ public class MonitorConsumeRequest {
     return Objects.hash(messageId, limit);
   }
 
+  /**
+   * Converts the MonitorConsumeRequest to {@link GenericRecord}
+   */
   public GenericRecord toGenericRecord() {
     GenericRecord record = new GenericData.Record(MonitorSchemas.V1.MonitorConsumeRequest.SCHEMA.getValueType());
     record.put("messageId", messageId);
     record.put("limit", limit);
     return record;
-  }
-
-  /**
-   * Util method to provide messageId from generic record
-   */
-  @Nullable
-  public static String getMessageId(GenericRecord record) {
-    if (record.get("messageId") == null) {
-      return null;
-    }
-    return String.valueOf(record.get("messageId"));
-  }
-
-  /**
-   * Util method to provide limit from generic record
-   */
-  public static int getLimit(GenericRecord record) {
-    return (int) record.get("limit");
   }
 }

@@ -58,6 +58,7 @@ public final class RuntimeMonitorClient {
   private final HttpRequestConfig requestConfig;
   private final KeyStore keyStore;
   private final KeyStore trustStore;
+  private final DatumReader<GenericRecord> responseDatumReader;
 
 
   public RuntimeMonitorClient(String hostname, int port, HttpRequestConfig requestConfig,
@@ -66,6 +67,8 @@ public final class RuntimeMonitorClient {
     this.requestConfig = requestConfig;
     this.keyStore = keyStore;
     this.trustStore = trustStore;
+    this.responseDatumReader = new GenericDatumReader<>(
+      MonitorSchemas.V1.MonitorResponse.SCHEMA.getValueType().getElementType());
   }
 
   /**
@@ -105,10 +108,10 @@ public final class RuntimeMonitorClient {
    * Encode request to avro binary format.
    * @param topicsToRequest topic requests to be
    * @param outputStream Outputstream to write to
-   * @throws IOException
+   * @throws IOException if there is any exception while reading from output stream
    */
-  public static void encodeRequest(Map<String, MonitorConsumeRequest> topicsToRequest,
-                                   OutputStream outputStream) throws IOException {
+  private void encodeRequest(Map<String, MonitorConsumeRequest> topicsToRequest,
+                            OutputStream outputStream) throws IOException {
     Encoder encoder = EncoderFactory.get().directBinaryEncoder(outputStream, null);
     encoder.writeMapStart();
     encoder.setItemCount(topicsToRequest.size());
@@ -126,23 +129,27 @@ public final class RuntimeMonitorClient {
   }
 
   /**
-   * Decodes avro binary response
+   * Decodes avro binary response.
+   * @param is input stream to read from
+   * @throws IOException if there is any exception while reading from input stream
    */
-  public static Map<String, Deque<MonitorMessage>> decodeResponse(InputStream is) throws IOException {
+  private Map<String, Deque<MonitorMessage>> decodeResponse(InputStream is) throws IOException {
     Decoder decoder = DecoderFactory.get().directBinaryDecoder(is, null);
     GenericRecord reuse = new GenericData.Record(MonitorSchemas.V1.MonitorResponse.SCHEMA.getValueType()
                                                    .getElementType());
-    DatumReader<GenericRecord> responseDatumReader = new GenericDatumReader<>(
-      MonitorSchemas.V1.MonitorResponse.SCHEMA.getValueType().getElementType());
 
     Map<String, Deque<MonitorMessage>> decodedMessages = new HashMap<>();
     long entries = decoder.readMapStart();
     while (entries > 0) {
       String topicConfig = decoder.readString();
+      if (topicConfig.isEmpty()) {
+        continue;
+      }
+
       decodedMessages.put(topicConfig, new LinkedList<>());
       long messages = decoder.readArrayStart();
       while (messages > 0) {
-        responseDatumReader.read(reuse, decoder);
+        reuse = responseDatumReader.read(reuse, decoder);
         decodedMessages.get(topicConfig).add(new MonitorMessage(reuse));
         messages--;
       }

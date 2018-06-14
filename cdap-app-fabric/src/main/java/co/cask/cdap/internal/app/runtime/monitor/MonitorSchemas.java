@@ -25,6 +25,9 @@ import java.io.InputStream;
 import java.net.URL;
 import javax.annotation.Nullable;
 
+/**
+ * Loads Avro schemas for Monitor request and response.
+ */
 public final class MonitorSchemas {
 
     private MonitorSchemas() {

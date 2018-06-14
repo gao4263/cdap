@@ -105,7 +105,6 @@ public class RuntimeHandler extends AbstractHttpHandler {
   @Path("/metadata")
   public void metadata(FullHttpRequest request, HttpResponder responder) throws Exception {
     Map<Utf8, GenericRecord> consumeRequests = decodeConsumeRequest(request);
-
     ChunkResponder chunkResponder = responder.sendChunkStart(
             HttpResponseStatus.OK, new DefaultHttpHeaders().set(HttpHeaderNames.CONTENT_TYPE, "avro/binary"));
     ByteBuf buffer = Unpooled.buffer();
@@ -133,7 +132,7 @@ public class RuntimeHandler extends AbstractHttpHandler {
   /**
    * Decode consume request from avro binary format
    */
-  public static Map<Utf8, GenericRecord> decodeConsumeRequest(FullHttpRequest request) throws IOException {
+  private Map<Utf8, GenericRecord> decodeConsumeRequest(FullHttpRequest request) throws IOException {
     Decoder decoder = DecoderFactory.get().directBinaryDecoder(new ByteBufInputStream(request.content()), null);
     DatumReader<Map<Utf8, GenericRecord>> datumReader = new GenericDatumReader<>(
       MonitorSchemas.V1.MonitorConsumeRequest.SCHEMA);
@@ -153,7 +152,6 @@ public class RuntimeHandler extends AbstractHttpHandler {
 
     for (Map.Entry<Utf8, GenericRecord> entry : consumeRequests.entrySet()) {
       String topicConfig = String.valueOf(entry.getKey());
-
       encoder.startItem();
       encoder.writeString(topicConfig);
       encoder.writeArrayStart();
@@ -196,7 +194,7 @@ public class RuntimeHandler extends AbstractHttpHandler {
         while (iter.hasNext() && size < CHUNK_SIZE) {
           Message rawMessage = iter.next();
           // Avro requires number of objects to be written first so we will have to buffer messages
-          GenericRecord record = getGenericRecord(rawMessage);
+          GenericRecord record = createGenericRecord(rawMessage);
           monitorMessages.addLast(record);
           // Avro prefixes string and byte array with its length which is a 32 bit int. So add 8 bytes to size for
           // correct calculation of number bytes on the buffer.
@@ -217,7 +215,7 @@ public class RuntimeHandler extends AbstractHttpHandler {
     }
   }
 
-  private GenericRecord getGenericRecord(Message rawMessage) {
+  private GenericRecord createGenericRecord(Message rawMessage) {
     GenericRecord record = new GenericData.Record(MonitorSchemas.V1.MonitorResponse.SCHEMA
                                                     .getValueType().getElementType());
     record.put("messageId", rawMessage.getId());
