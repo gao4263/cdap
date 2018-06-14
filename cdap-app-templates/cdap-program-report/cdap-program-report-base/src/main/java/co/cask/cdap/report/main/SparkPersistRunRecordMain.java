@@ -46,6 +46,8 @@ public class SparkPersistRunRecordMain implements JavaSparkMain {
   private static final Logger LOG = LoggerFactory.getLogger(SparkPersistRunRecordMain.class);
   private static final SampledLogging SAMPLED_LOGGING = new SampledLogging(LOG, 100);
   private static final String KEY_FILE_PERMISSION = "700";
+  private static final String ENCRYPTION_ALGORITHM = "AES";
+  private static final int ENCRYPTION_KEY_BITSIZE = 128;
 
   @Override
   public void run(JavaSparkExecutionContext sec) throws Exception {
@@ -79,8 +81,8 @@ public class SparkPersistRunRecordMain implements JavaSparkMain {
   private void createSecurityKeyFile(Location reportFileSetLocation) throws IOException, NoSuchAlgorithmException {
     Location keyLocation = reportFileSetLocation.append(KEY_FILE_NAME);
     if (!keyLocation.exists()) {
-      KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
-      keyGenerator.init(128);
+      KeyGenerator keyGenerator = KeyGenerator.getInstance(ENCRYPTION_ALGORITHM);
+      keyGenerator.init(ENCRYPTION_KEY_BITSIZE);
       Key key = keyGenerator.generateKey();
       byte[] encodedKey = key.getEncoded();
       writeKeyBytes(keyLocation, encodedKey);

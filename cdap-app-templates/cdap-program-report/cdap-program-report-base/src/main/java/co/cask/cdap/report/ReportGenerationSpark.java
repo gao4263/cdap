@@ -129,6 +129,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
     private static final String SAVED_FILE = "_SAVED";
     // report files will expire after 48 hours after they are generated
     private static final long VALID_DURATION_MILLIS = TimeUnit.DAYS.toMillis(2);
+    private static final String ENCRYPTION_ALGORITHM = "AES";
 
     private int readLimit;
     private SQLContext sqlContext;
@@ -147,7 +148,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * Read the secure key file to read the security key bytes and initialize Cipher using AES and the mode
      * encryption/decryption is based on the parameter cipherMode.
      *
-     * @param cipherMode
+     * @param cipherMode either encrypt or decrypt mode
      * @return Initialized Cipher
      * @throws IOException If the key file doesn't exist or if there are any exception while reading the file
      */
@@ -159,8 +160,8 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         throw new FileNotFoundException("Security Key file doesn't exist, cannot share reports");
       }
       byte[] keyBytes = ByteStreams.toByteArray(keyLocation.getInputStream());
-      Cipher cipher = Cipher.getInstance("AES");
-      SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, "AES");
+      Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+      SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, ENCRYPTION_ALGORITHM);
       cipher.init(cipherMode, secretKeySpec);
       return cipher;
     }
