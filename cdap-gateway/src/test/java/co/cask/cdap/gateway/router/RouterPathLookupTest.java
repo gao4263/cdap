@@ -33,7 +33,7 @@ import java.util.EnumSet;
 /**
  *  To test the RouterPathLookup regular expression tests.
  */
-public class RouterPathTest {
+public class RouterPathLookupTest {
 
   private static RouterPathLookup pathLookup;
   private static final HttpVersion VERSION = HttpVersion.HTTP_1_1;

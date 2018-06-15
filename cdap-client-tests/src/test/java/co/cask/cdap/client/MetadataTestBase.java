@@ -274,11 +274,8 @@ public abstract class MetadataTestBase extends ClientTestBase {
 
 
   protected void assertRunMetadataNotFound(ProgramRunId run) throws Exception {
-    for (MetadataRecord record : getMetadata(run)) {
-      Assert.assertTrue(record.getScope() == MetadataScope.SYSTEM || record.getScope() == MetadataScope.USER);
-      Assert.assertTrue(record.getProperties().isEmpty());
-      Assert.assertTrue(record.getTags().isEmpty());
-    }
+    Set<MetadataRecord> metadataRecords = getMetadata(run);
+    Assert.assertEquals(0, metadataRecords.size());
   }
 
   private <T> void expectException(Callable<T> callable, Class<? extends Exception> expectedExceptionClass) {

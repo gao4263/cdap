@@ -121,7 +121,7 @@ public class ProgramRunId extends NamespacedEntityId implements ParentedId<Progr
     return MetadataEntity.ofNamespace(namespace).append(MetadataEntity.APPLICATION, application)
       .append(MetadataEntity.VERSION, version).append(MetadataEntity.TYPE, type.getPrettyName())
       .append(MetadataEntity.PROGRAM, program)
-      .append(MetadataEntity.PROGRAM_RUN, run);
+      .appendAsType(MetadataEntity.PROGRAM_RUN, run);
   }
 
   @Override

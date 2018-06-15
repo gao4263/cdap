@@ -111,8 +111,8 @@ public final class RouterPathLookup extends AbstractHttpHandler {
     } else if ((!matches(uriParts, "v3", "namespaces", null, "securekeys")) && (endsWith(uriParts, "metadata") ||
       // do no intercept the namespaces/<namespace-name>/securekeys/<key>/metadata as that is handled by the
       // SecureStoreHandler
-      endsWith(uriParts, "metadata", "properties") || endsWith(uriParts, "metadata", "properties", "*") ||
-      endsWith(uriParts, "metadata", "tags") || endsWith(uriParts, "metadata", "tags", "*") ||
+      endsWith(uriParts, "metadata", "properties") || endsWith(uriParts, "metadata", "properties", "?") ||
+      endsWith(uriParts, "metadata", "tags") || endsWith(uriParts, "metadata", "tags", "?") ||
       endsWith(uriParts, "metadata", "search") || endsWith(uriParts, "lineage"))) {
       return METADATA_SERVICE;
     } else if (matches(uriParts, "v3", "security", "authorization") ||
@@ -216,11 +216,22 @@ public final class RouterPathLookup extends AbstractHttpHandler {
     return true;
   }
 
+  /**
+   * Determines if the actual ends with expected. If expected contains '?' at the end the the last element of actual
+   * is ignored as ? is considered to match one element regardless of what it is
+   */
   private boolean endsWith(String[] actual, String... expectedEnd) {
-    for (int i = expectedEnd.length - 1; i >= 0; i--) {
-      if (!expectedEnd[i].equals("*") &&
-        ((actual.length < (expectedEnd.length - i)) ||
-          !actual[actual.length - (expectedEnd.length - i)].equalsIgnoreCase(expectedEnd[i]))) {
+    if (expectedEnd.length > actual.length) {
+      return false;
+    }
+    int offset = 1;
+    if (expectedEnd[expectedEnd.length - offset].equals("?")) {
+      offset++;
+    }
+    while (expectedEnd.length - offset >= 0) {
+      if (expectedEnd[expectedEnd.length - offset].equalsIgnoreCase(actual[actual.length - offset])) {
+        offset++;
+      } else {
         return false;
       }
     }

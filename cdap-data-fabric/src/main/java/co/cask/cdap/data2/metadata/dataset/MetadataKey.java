@@ -111,7 +111,12 @@ class MetadataKey {
     while (keySplitter.hasRemaining()) {
       // add the last read key and value in metadata entity and read the ones ahead for next loop
       // we do this since we don't want the last part as its metadata info ([key] or [key][index])
-      metadataEntity = metadataEntity.append(key, value);
+      if (key.equalsIgnoreCase(targetType)) {
+        // if the current key is the targetType then append it as the type for MetadataEntity
+        metadataEntity = metadataEntity.appendAsType(key, value);
+      } else {
+        metadataEntity = metadataEntity.append(key, value);
+      }
       key = keySplitter.getString();
       if (keySplitter.hasRemaining()) {
         value = keySplitter.getString();
@@ -119,7 +124,7 @@ class MetadataKey {
         break;
       }
     }
-    return metadataEntity.changeType(targetType);
+    return metadataEntity;
   }
 
   static byte[] getValueRowPrefix() {
