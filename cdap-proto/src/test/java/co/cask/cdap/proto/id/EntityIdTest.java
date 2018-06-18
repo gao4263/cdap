@@ -15,6 +15,7 @@
  */
 package co.cask.cdap.proto.id;
 
+import co.cask.cdap.api.metadata.MetadataEntity;
 import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.codec.EntityIdTypeAdapter;
 import com.google.gson.Gson;
@@ -266,6 +267,51 @@ public class EntityIdTest {
     for (Map.Entry<? extends EntityId, String> toJsonEntry : idsToJson.entrySet()) {
       Assert.assertEquals(jsonToMap(toJsonEntry.getValue()), jsonToMap(GSON.toJson(toJsonEntry.getKey())));
     }
+  }
+
+
+  @Test
+  public void testFromMetadataEntity() {
+    ApplicationId applicationId = new ApplicationId("testNs", "app1");
+    Assert.assertEquals(applicationId, EntityId.fromMetadataEntity(applicationId.toMetadataEntity()));
+
+    MetadataEntity metadataEntity = MetadataEntity.ofNamespace("testNs").appendAsType(MetadataEntity.APPLICATION,
+                                                                                      "app1");
+    Assert.assertEquals(applicationId, EntityId.fromMetadataEntity(metadataEntity));
+
+    metadataEntity = MetadataEntity.ofDataset("testNs", "testDs").appendAsType("field", "testField");
+    try {
+      EntityId.fromMetadataEntity(metadataEntity);
+      Assert.fail("Should have failed to get create an EntityId from MetadataEntity");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+
+    ProgramId programId = new ProgramId(applicationId, ProgramType.WORKER, "testWorker");
+    Assert.assertEquals(programId, EntityId.fromMetadataEntity(programId.toMetadataEntity()));
+
+    ArtifactId artifactId = new ArtifactId("testNs", "testArtifact-1.0.0.jar");
+    Assert.assertEquals(artifactId, EntityId.fromMetadataEntity(artifactId.toMetadataEntity()));
+  }
+
+  @Test
+  public void testGetKnownParentEntityId() {
+    MetadataEntity metadataEntity = MetadataEntity.ofDataset("testNs", "testDs").appendAsType("field", "testField");
+    Assert.assertEquals(new DatasetId("testNs", "testDs"), EntityId.getKnownParentEntityId(metadataEntity));
+
+    metadataEntity = MetadataEntity.ofNamespace("testNs").append(MetadataEntity.APPLICATION, "testApp")
+      .appendAsType("custom", "custValue");
+    Assert.assertEquals(new ApplicationId("testNs", "testApp"), EntityId.getKnownParentEntityId(metadataEntity));
+
+    metadataEntity = MetadataEntity.ofNamespace("testNs").append(MetadataEntity.APPLICATION, "testApp")
+      .append(MetadataEntity.TYPE, ProgramType.WORKER.getPrettyName()).append(MetadataEntity.PROGRAM, "testProg")
+      .appendAsType("subType", "realtime");
+    Assert.assertEquals(new ProgramId("testNs", "testApp", ProgramType.WORKER, "testProg"),
+                        EntityId.getKnownParentEntityId(metadataEntity));
+
+    ArtifactId artifactId = new ArtifactId("testNs", "testArtifact-1.0.0.jar");
+    metadataEntity = artifactId.toMetadataEntity().append("time", "t2");
+    Assert.assertEquals(artifactId, EntityId.getKnownParentEntityId(metadataEntity));
   }
 
   @Test

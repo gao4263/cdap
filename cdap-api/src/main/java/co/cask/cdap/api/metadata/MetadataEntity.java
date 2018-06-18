@@ -162,6 +162,31 @@ public class MetadataEntity implements Iterable<MetadataEntity.KeyValue> {
   }
 
   /**
+   * Returns a List of {@link KeyValue} till the given splitKey (inclusive)
+   *
+   * @param splitKey the splitKey (inclusive)
+   * @return List of {@link KeyValue}
+   */
+  public List<MetadataEntity.KeyValue> getTill(String splitKey) {
+    splitKey = splitKey.toLowerCase();
+    if (!containsKey(splitKey)) {
+      throw new IllegalArgumentException(String.format("The given key %s does not exists in %s", splitKey, toString()));
+    }
+    List<MetadataEntity.KeyValue> subParts = new ArrayList<>();
+    for (KeyValue keyValue : this) {
+      if (!keyValue.getKey().equalsIgnoreCase(splitKey)) {
+        // reach till the parent key part, everything after this is subpart so set the copy flag
+        subParts.add(keyValue);
+      } else {
+        // copy the matched key as the call is inclusive
+        subParts.add(keyValue);
+        break;
+      }
+    }
+    return subParts;
+  }
+
+  /**
    * @return the type of the MetadataEntity
    */
   public String getType() {
@@ -240,7 +265,7 @@ public class MetadataEntity implements Iterable<MetadataEntity.KeyValue> {
     private final String key;
     private final String value;
 
-    KeyValue(String key, String value) {
+    public KeyValue(String key, String value) {
       this.key = key;
       this.value = value;
     }

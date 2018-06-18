@@ -415,9 +415,9 @@ public class  MetadataDatasetTest {
   @Test
   public void testSearchOnTypes() throws Exception {
     MetadataEntity myField1 = MetadataEntity.ofDataset(NamespaceId.DEFAULT.getEntityName(),
-                                                       "myDs").append("field", "myField1");
+                                                       "myDs").appendAsType("field", "myField1");
     MetadataEntity myField2 = MetadataEntity.ofDataset(NamespaceId.DEFAULT.getEntityName(),
-                                                       "myDs").append("field", "myField2");
+                                                       "myDs").appendAsType("field", "myField2");
     final MetadataEntry myFieldEntry1 = new MetadataEntry(myField1, "testKey1", "testValue1");
     final MetadataEntry myFieldEntry2 = new MetadataEntry(myField2, "testKey2", "testValue2");
     txnl.execute(() -> {

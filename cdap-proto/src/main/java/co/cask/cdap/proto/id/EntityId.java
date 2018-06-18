@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Vector;
@@ -152,21 +153,63 @@ public abstract class EntityId {
    * metadataEntity.
    */
   public static <T extends EntityId> T fromMetadataEntity(MetadataEntity metadataEntity) {
-    EntityType entityType = EntityType.valueOf(metadataEntity.getType().toUpperCase());
-    if ((entityType == EntityType.APPLICATION || entityType == EntityType.PROGRAM) &&
-      metadataEntity.getValue(MetadataEntity.VERSION) == null) {
-      // if the EntityType is application or program and a version is not specified in the MetadataEntity then add it
-      if (entityType == EntityType.APPLICATION) {
-        metadataEntity = metadataEntity.append(MetadataEntity.VERSION, ApplicationId.DEFAULT_VERSION);
-      } else {
-        metadataEntity = MetadataEntity.ofNamespace(metadataEntity.getValue(MetadataEntity.NAMESPACE))
-          .append(MetadataEntity.APPLICATION, metadataEntity.getValue(MetadataEntity.APPLICATION))
-          .append(MetadataEntity.VERSION, ApplicationId.DEFAULT_VERSION)
-          .append(MetadataEntity.TYPE, metadataEntity.getValue(MetadataEntity.TYPE))
-          .append(MetadataEntity.PROGRAM, metadataEntity.getValue(MetadataEntity.PROGRAM));
+    EntityType.valueOf(metadataEntity.getType().toUpperCase());
+    return getKnownParentEntityId(metadataEntity);
+  }
+
+  /**
+   * Creates a valid known CDAP entity which can be considered as the parent for the MetadataEntity by walking up the
+   * key-value hierarchy of the MetadataEntity till a known CDAP {@link EntityType} is found.
+   *
+   * @param metadataEntity whose parent entityId needs to be found
+   * @return {@link EntityId} of the given metadataEntity
+   */
+  public static <T extends EntityId> T getKnownParentEntityId(MetadataEntity metadataEntity) {
+    EntityType entityType = findParentType(metadataEntity);
+    List<String> values = new LinkedList<>();
+    List<MetadataEntity.KeyValue> till = metadataEntity.getTill(entityType.toString());
+    String version = metadataEntity.containsKey(MetadataEntity.VERSION) ?
+      metadataEntity.getValue(MetadataEntity.VERSION) : ApplicationId.DEFAULT_VERSION;
+    if (entityType == EntityType.APPLICATION) {
+      till.add(new MetadataEntity.KeyValue(MetadataEntity.VERSION, version));
+    }
+    if (entityType == EntityType.PROGRAM) {
+      if (!metadataEntity.containsKey(MetadataEntity.VERSION)) {
+        till.add(2, new MetadataEntity.KeyValue(MetadataEntity.VERSION, version));
       }
     }
-    return entityType.fromIdParts(metadataEntity.getValues());
+    if (entityType == EntityType.ARTIFACT) {
+      till = metadataEntity.getTill(MetadataEntity.VERSION);
+    }
+    till.iterator().forEachRemaining(keyValue -> values.add(keyValue.getValue()));
+    return entityType.fromIdParts(values);
+  }
+
+  /**
+   * Finds a valid known CDAP entity which can be considered as the parent for the MetadataEntity by walking up the
+   * key-value hierarchy of the MetadataEntity
+   *
+   * @param metadataEntity whose EntityType needs to be determined
+   * @return {@link EntityType} of the given metadataEntity
+   */
+  private static EntityType findParentType(MetadataEntity metadataEntity) {
+    List<String> keys = new ArrayList<>();
+    metadataEntity.getKeys().forEach(keys::add);
+    int curIndex = keys.size() - 1;
+    EntityType entityType = null;
+    while (curIndex >= 0) {
+      try {
+        entityType = EntityType.valueOf(keys.get(curIndex).toUpperCase());
+        // found a valid entity type;
+        break;
+      } catch (IllegalArgumentException e) {
+        // the current key is not a valid cdap entity type so try up in hierarchy
+        curIndex--;
+      }
+    }
+    // if we were not able to find any valid cdap entity type than we will fall back to InstanceId as everything
+    // belong to a cdap instance
+    return entityType == null ? EntityType.INSTANCE : entityType;
   }
 
   public final EntityType getEntityType() {
