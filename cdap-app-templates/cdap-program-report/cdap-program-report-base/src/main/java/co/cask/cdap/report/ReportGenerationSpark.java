@@ -56,6 +56,7 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -106,7 +107,6 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
   // User name authenticated and passed down by CDAP-Router using this key in header
   private static final String USER_ID = "CDAP-UserId";
   private static final String DEFAULT_USER_ID = "system";
-  private static final String UTF8_ENCODING = "UTF-8";
 
   @Override
   protected void configure() {
@@ -150,20 +150,26 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      *
      * @param cipherMode either encrypt or decrypt mode
      * @return Initialized Cipher
-     * @throws IOException If the key file doesn't exist or if there are any exception while reading the file
+     * @throws FileNotFoundException If the key file doesn't exist
+     * @throws IOException If there are any exception while reading the file
+     * @throws NoSuchAlgorithmException if encryption algorithm is not found
+     * @throws NoSuchPaddingException could be thrown while getting cipher instance for encryption algorithm
+     * @throws InvalidKeyException could be thrown while getting cipher instance for encryption algorithm
      */
-    private Cipher initializeCipher(int cipherMode) throws IOException, NoSuchPaddingException,
+    private Cipher initializeCipher(int cipherMode) throws FileNotFoundException, IOException, NoSuchPaddingException,
       NoSuchAlgorithmException, InvalidKeyException {
       Location keyLocation =
         getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(SparkPersistRunRecordMain.KEY_FILE_NAME);
       if (!keyLocation.exists()) {
         throw new FileNotFoundException("Security Key file doesn't exist, cannot share reports");
       }
-      byte[] keyBytes = ByteStreams.toByteArray(keyLocation.getInputStream());
-      Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
-      SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, ENCRYPTION_ALGORITHM);
-      cipher.init(cipherMode, secretKeySpec);
-      return cipher;
+      try (InputStream inputStream = keyLocation.getInputStream()) {
+        byte[] keyBytes = ByteStreams.toByteArray(inputStream);
+        Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+        SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, ENCRYPTION_ALGORITHM);
+        cipher.init(cipherMode, secretKeySpec);
+        return cipher;
+      }
     }
 
     @GET
@@ -237,7 +243,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
         String userName = getUserName(request.getAllHeaders());
         reportIdDir = getDatasetBaseLocation(ReportGenerationApp.REPORT_FILESET).append(userName).append(reportId);
         if (!reportIdDir.exists()) {
-          responder.sendError(500, String.format("Invalid report-id %s, report does not exist", reportId));
+          responder.sendError(404, String.format("Invalid report-id %s, report does not exist", reportId));
           return;
         }
         String shareId = encodeShareId(new ReportIdentifier(userName, reportId));
@@ -251,21 +257,21 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
     }
 
     private String encodeShareId(ReportIdentifier reportIdentifier) throws GeneralSecurityException, IOException {
-      byte[] response = GSON.toJson(reportIdentifier).getBytes();
+      byte[] response = GSON.toJson(reportIdentifier).getBytes(StandardCharsets.UTF_8);
       if (encryptionCipher == null) {
         encryptionCipher = initializeCipher(Cipher.ENCRYPT_MODE);
       }
       byte[] cipherReponse = encryptionCipher.doFinal(response);
-      return Base64.getEncoder().encodeToString(cipherReponse);
+      return Base64.getUrlEncoder().encodeToString(cipherReponse);
     }
 
     private ReportIdentifier decodeShareId(String shareId) throws GeneralSecurityException, IOException {
-      byte[] decodedCipherBytes = Base64.getDecoder().decode(shareId);
+      byte[] decodedCipherBytes = Base64.getUrlDecoder().decode(shareId.getBytes());
       if (decryptionCipher == null) {
         decryptionCipher = initializeCipher(Cipher.DECRYPT_MODE);
       }
       byte[]  decodedBytes = decryptionCipher.doFinal(decodedCipherBytes);
-      String decodedString = new String(decodedBytes, 0, decodedBytes.length, UTF8_ENCODING);
+      String decodedString = new String(decodedBytes, 0, decodedBytes.length, StandardCharsets.UTF_8);
       return GSON.fromJson(decodedString, ReportIdentifier.class);
     }
 
@@ -580,8 +586,7 @@ public class ReportGenerationSpark extends AbstractExtendedSpark {
      * @throws UnsupportedEncodingException if there are any error while decoding the shareId
      */
     private ReportIdentifier validateAndGetReportIdentifier(
-      @Nullable String reportId, Map<String, List<String>> headers,
-      @Nullable String shareId)
+      @Nullable String reportId, Map<String, List<String>> headers, @Nullable String shareId)
       throws IllegalArgumentException, IOException, GeneralSecurityException {
       if (reportId == null && shareId == null) {
         throw new IllegalArgumentException("Either reportId or sharedId must be provided, missing both");

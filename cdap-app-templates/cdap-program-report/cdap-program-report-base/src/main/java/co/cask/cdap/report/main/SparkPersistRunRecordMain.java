@@ -60,7 +60,8 @@ public class SparkPersistRunRecordMain implements JavaSparkMain {
     Location reportFileSetLocation = getDatasetBaseLocationWithRetry(sec, ReportGenerationApp.REPORT_FILESET);
     createSecurityKeyFile(reportFileSetLocation);
     tmsSubscriber = new TMSSubscriber(sec.getMessagingContext().getMessageFetcher(),
-            getDatasetBaseLocationWithRetry(sec, ReportGenerationApp.RUN_META_FILESET), sec.getRuntimeArguments());
+                                      getDatasetBaseLocationWithRetry(sec, ReportGenerationApp.RUN_META_FILESET),
+                                      sec.getRuntimeArguments());
     tmsSubscriber.start();
     try {
       tmsSubscriber.join();
@@ -92,7 +93,6 @@ public class SparkPersistRunRecordMain implements JavaSparkMain {
   private void writeKeyBytes(Location keyLocation, byte[] encodedKey) throws IOException {
     try (OutputStream outputStream = keyLocation.getOutputStream(KEY_FILE_PERMISSION)) {
       outputStream.write(encodedKey);
-      outputStream.flush();
     }
   }
 
