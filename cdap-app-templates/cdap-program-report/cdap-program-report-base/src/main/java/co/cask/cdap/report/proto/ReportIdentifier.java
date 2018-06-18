@@ -20,19 +20,19 @@ package co.cask.cdap.report.proto;
  * ReportIdentifier represented by userName and reportId
  */
 public class ReportIdentifier {
-    private final String userName;
-    private final String reportId;
+  private final String userName;
+  private final String reportId;
 
-    public ReportIdentifier(String userName, String reportId) {
-        this.userName = userName;
-        this.reportId = reportId;
-    }
+  public ReportIdentifier(String userName, String reportId) {
+    this.userName = userName;
+    this.reportId = reportId;
+  }
 
-    public String getUserName() {
-        return userName;
-    }
+  public String getUserName() {
+    return userName;
+  }
 
-    public String getReportId() {
-        return reportId;
-    }
+  public String getReportId() {
+    return reportId;
+  }
 }
