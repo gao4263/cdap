@@ -38,12 +38,12 @@ $text-color: $grey-01;
       border-bottom: 1px solid $border-color;
 
       &:hover {
-        color: $cdap-orange;
+        color: $gcp-blue;
       }
 
       &.active {
         background-color: $active-bg-color;
-        color: $cdap-orange;
+        color: $gcp-blue;
         font-weight: bold;
       }
 
