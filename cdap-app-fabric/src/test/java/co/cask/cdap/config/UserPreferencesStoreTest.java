@@ -23,6 +23,7 @@ import co.cask.cdap.common.id.Id;
 import co.cask.cdap.internal.app.runtime.SystemArguments;
 import co.cask.cdap.internal.app.services.http.AppFabricTestBase;
 import co.cask.cdap.internal.profile.ProfileService;
+import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.id.ProfileId;
 import co.cask.cdap.proto.profile.Profile;
 import com.google.common.collect.ImmutableMap;
@@ -194,11 +195,11 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
     Assert.assertEquals(emptyMap, store.getProperties("somenamespace"));
     Assert.assertEquals(emptyMap, store.getProperties(Id.Namespace.DEFAULT.getId()));
     Assert.assertEquals(emptyMap, store.getResolvedProperties());
-    Assert.assertEquals(emptyMap, store.getResolvedProperties("a", "b", "c", "d"));
+    Assert.assertEquals(emptyMap, store.getResolvedProperties("a", "b", ProgramType.WORKFLOW.getCategoryName(), "d"));
     // should not throw any exception if try to delete properties without storing anything
     store.deleteProperties();
     store.deleteProperties(Id.Namespace.DEFAULT.getId());
-    store.deleteProperties("a", "x", "y", "z");
+    store.deleteProperties("a", "x", "workflows", "z");
   }
 
   @Test
@@ -208,13 +209,13 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
     PreferencesStore store = getInjector().getInstance(PreferencesStore.class);
     store.setProperties(propMap);
     Assert.assertEquals(propMap, store.getProperties());
-    Assert.assertEquals(propMap, store.getResolvedProperties("a", "b", "c", "d"));
+    Assert.assertEquals(propMap, store.getResolvedProperties("a", "b", "workflows", "d"));
     Assert.assertEquals(propMap, store.getResolvedProperties("myspace"));
     Assert.assertEquals(ImmutableMap.<String, String>of(), store.getProperties("myspace"));
     store.deleteProperties();
     propMap.clear();
     Assert.assertEquals(propMap, store.getProperties());
-    Assert.assertEquals(propMap, store.getResolvedProperties("a", "b", "c", "d"));
+    Assert.assertEquals(propMap, store.getResolvedProperties("a", "b", "workflows", "d"));
     Assert.assertEquals(propMap, store.getResolvedProperties("myspace"));
   }
 
@@ -238,15 +239,15 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
     store.deleteProperties("myspace", "app");
     Assert.assertTrue(store.getProperties("myspace", "app").isEmpty());
     propMap.put("key", "program");
-    store.setProperties("myspace", "app", "workflow", "prog", propMap);
-    Assert.assertEquals(propMap, store.getProperties("myspace", "app", "workflow", "prog"));
+    store.setProperties("myspace", "app", "workflows", "prog", propMap);
+    Assert.assertEquals(propMap, store.getProperties("myspace", "app", "workflows", "prog"));
     store.setProperties(ImmutableMap.of("key", "instance"));
-    Assert.assertEquals(propMap, store.getProperties("myspace", "app", "workflow", "prog"));
-    store.deleteProperties("myspace", "app", "workflow", "prog");
-    Assert.assertTrue(store.getProperties("myspace", "app", "workflow", "prog").isEmpty());
-    Assert.assertEquals("instance", store.getResolvedProperties("myspace", "app", "workflow", "prog").get("key"));
+    Assert.assertEquals(propMap, store.getProperties("myspace", "app", "workflows", "prog"));
+    store.deleteProperties("myspace", "app", "workflows", "prog");
+    Assert.assertTrue(store.getProperties("myspace", "app", "workflows", "prog").isEmpty());
+    Assert.assertEquals("instance", store.getResolvedProperties("myspace", "app", "workflows", "prog").get("key"));
     store.deleteProperties();
-    Assert.assertEquals(ImmutableMap.<String, String>of(), store.getProperties("myspace", "app", "workflow", "prog"));
+    Assert.assertEquals(ImmutableMap.<String, String>of(), store.getProperties("myspace", "app", "workflows", "prog"));
   }
 
   @Test
@@ -257,8 +258,8 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
     // put a profile unrelated property should not affect the write
     Map<String, String> expected = new HashMap<>();
     expected.put("unRelatedKey", "unRelatedValue");
-    prefStore.setProperties("myspace", "app", "workflow", "prog", expected);
-    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflow", "prog"));
+    prefStore.setProperties("myspace", "app", "workflows", "prog", expected);
+    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflows", "prog"));
 
     // put something related to profile
     Map<String, String> profileMap = new HashMap<>();
@@ -266,13 +267,13 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
 
     // this set call should fail since the profile does not exist
     try {
-      prefStore.setProperties("myspace", "app", "workflow", "prog", profileMap);
+      prefStore.setProperties("myspace", "app", "workflows", "prog", profileMap);
       Assert.fail();
     } catch (NotFoundException e) {
       // expected
     }
     // the pref store should remain unchanged
-    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflow", "prog"));
+    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflows", "prog"));
 
     // add the profile and disable it
     ProfileId profileId = new ProfileId("myspace", "userProfile");
@@ -281,21 +282,21 @@ public class UserPreferencesStoreTest extends AppFabricTestBase {
 
     // this set call should fail since the profile is disabled
     try {
-      prefStore.setProperties("myspace", "app", "workflow", "prog", profileMap);
+      prefStore.setProperties("myspace", "app", "workflows", "prog", profileMap);
       Assert.fail();
     } catch (ProfileConflictException e) {
       // expected
     }
     // the pref store should remain unchanged
-    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflow", "prog"));
+    Assert.assertEquals(expected, prefStore.getProperties("myspace", "app", "workflows", "prog"));
 
     // enable the profile
     profileStore.enableProfile(profileId);
     expected = profileMap;
-    prefStore.setProperties("myspace", "app", "workflow", "prog", profileMap);
-    Map<String, String> properties = prefStore.getProperties("myspace", "app", "workflow", "prog");
+    prefStore.setProperties("myspace", "app", "workflows", "prog", profileMap);
+    Map<String, String> properties = prefStore.getProperties("myspace", "app", "workflows", "prog");
     Assert.assertEquals(expected, properties);
 
-    prefStore.deleteProperties("myspace", "app", "workflow", "prog");
+    prefStore.deleteProperties("myspace", "app", "workflows", "prog");
   }
 }

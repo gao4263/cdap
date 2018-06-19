@@ -31,7 +31,8 @@ public enum EntityTypeSimpleName {
   PROGRAM("Program"),
   DATASET("DatasetInstance"),
   STREAM("Stream"),
-  VIEW("View");
+  VIEW("View"),
+  SCHEDULE("Schedule");
 
   private final String serializedForm;
 

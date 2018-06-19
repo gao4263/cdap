@@ -181,6 +181,11 @@ public class AppMetadataStore extends MetadataStoreDataset {
   }
 
   @Nullable
+  public ApplicationMeta getApplication(ApplicationId applicationId) {
+    return getApplication(applicationId.getNamespace(), applicationId.getApplication(), applicationId.getVersion());
+  }
+
+  @Nullable
   public ApplicationMeta getApplication(String namespaceId, String appId, String versionId) {
     ApplicationMeta appMeta = getFirst(new MDSKey.Builder().add(TYPE_APP_META, namespaceId, appId, versionId).build(),
                                        ApplicationMeta.class);

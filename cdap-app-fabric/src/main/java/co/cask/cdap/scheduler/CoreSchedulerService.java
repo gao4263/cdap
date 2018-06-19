@@ -43,6 +43,7 @@ import co.cask.cdap.internal.app.runtime.schedule.queue.JobQueueDataset;
 import co.cask.cdap.internal.app.runtime.schedule.store.ProgramScheduleStoreDataset;
 import co.cask.cdap.internal.app.runtime.schedule.store.Schedulers;
 import co.cask.cdap.internal.app.store.profile.ProfileDataset;
+import co.cask.cdap.internal.profile.ProfileMetadataPublisher;
 import co.cask.cdap.proto.ProgramType;
 import co.cask.cdap.proto.id.ApplicationId;
 import co.cask.cdap.proto.id.ProfileId;
@@ -63,6 +64,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -81,12 +83,14 @@ public class CoreSchedulerService extends AbstractIdleService implements Schedul
   private final Service internalService;
   private final DatasetFramework datasetFramework;
   private final TimeSchedulerService timeSchedulerService;
+  private final ProfileMetadataPublisher profileMetadataPublisher;
 
   @Inject
   CoreSchedulerService(TransactionSystemClient txClient, DatasetFramework datasetFramework,
                        TimeSchedulerService timeSchedulerService,
                        ScheduleNotificationSubscriberService scheduleNotificationSubscriberService,
-                       ConstraintCheckerService constraintCheckerService) {
+                       ConstraintCheckerService constraintCheckerService,
+                       ProfileMetadataPublisher profileMetadataPublisher) {
     this.startedLatch = new CountDownLatch(1);
     this.datasetFramework = datasetFramework;
     DynamicDatasetCache datasetCache =
@@ -120,6 +124,7 @@ public class CoreSchedulerService extends AbstractIdleService implements Schedul
         LOG.info("Stopped core scheduler service.");
       }
     }, co.cask.cdap.common.service.RetryStrategies.exponentialDelay(200, 5000, TimeUnit.MILLISECONDS));
+    this.profileMetadataPublisher = profileMetadataPublisher;
   }
 
   // Attempts to remove all jobs that are in PENDING_LAUNCH state.
@@ -242,6 +247,9 @@ public class CoreSchedulerService extends AbstractIdleService implements Schedul
       Throwables.propagate(e);
     }
 
+    for (ProgramSchedule schedule : schedules) {
+      profileMetadataPublisher.updateProfileMetadata(schedule.getScheduleId());
+    }
   }
 
   @Override
@@ -359,34 +367,42 @@ public class CoreSchedulerService extends AbstractIdleService implements Schedul
       store.deleteSchedules(scheduleIds);
       return null;
     }, NotFoundException.class);
+
+    for (ScheduleId scheduleId : scheduleIds) {
+      profileMetadataPublisher.removeProfileMetadata(scheduleId, Collections.singleton(scheduleId));
+    }
   }
 
   @Override
   public void deleteSchedules(ApplicationId appId) {
     checkStarted();
-    execute((StoreAndQueueTxRunnable<Void, RuntimeException>) (store, queue) -> {
-      long deleteTime = System.currentTimeMillis();
-      deleteSchedulesInScheduler(store.listSchedules(appId));
-      List<ScheduleId> deleted = store.deleteSchedules(appId);
-      for (ScheduleId scheduleId : deleted) {
-        queue.markJobsForDeletion(scheduleId, deleteTime);
-      }
-      return null;
-    }, RuntimeException.class);
+    List<ScheduleId> deletedSchedules =
+      execute((StoreAndQueueTxRunnable<List<ScheduleId>, RuntimeException>) (store, queue) -> {
+        long deleteTime = System.currentTimeMillis();
+        deleteSchedulesInScheduler(store.listSchedules(appId));
+        List<ScheduleId> deleted = store.deleteSchedules(appId);
+        for (ScheduleId scheduleId : deleted) {
+          queue.markJobsForDeletion(scheduleId, deleteTime);
+        }
+        return deleted;
+      }, RuntimeException.class);
+    profileMetadataPublisher.removeProfileMetadata(appId, new HashSet<>(deletedSchedules));
   }
 
   @Override
   public void deleteSchedules(ProgramId programId) {
     checkStarted();
-    execute((StoreAndQueueTxRunnable<Void, RuntimeException>) (store, queue) -> {
-      long deleteTime = System.currentTimeMillis();
-      deleteSchedulesInScheduler(store.listSchedules(programId));
-      List<ScheduleId> deleted = store.deleteSchedules(programId);
-      for (ScheduleId scheduleId : deleted) {
-        queue.markJobsForDeletion(scheduleId, deleteTime);
-      }
-      return null;
-    }, RuntimeException.class);
+    List<ScheduleId> deletedSchedules =
+      execute((StoreAndQueueTxRunnable<List<ScheduleId>, RuntimeException>) (store, queue) -> {
+        long deleteTime = System.currentTimeMillis();
+        deleteSchedulesInScheduler(store.listSchedules(programId));
+        List<ScheduleId> deleted = store.deleteSchedules(programId);
+        for (ScheduleId scheduleId : deleted) {
+          queue.markJobsForDeletion(scheduleId, deleteTime);
+        }
+        return deleted;
+      }, RuntimeException.class);
+    profileMetadataPublisher.removeProfileMetadata(programId, new HashSet<>(deletedSchedules));
   }
 
   @Override

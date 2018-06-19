@@ -23,6 +23,7 @@ import co.cask.cdap.proto.id.ArtifactId;
 import co.cask.cdap.proto.id.DatasetId;
 import co.cask.cdap.proto.id.NamespacedEntityId;
 import co.cask.cdap.proto.id.ProgramId;
+import co.cask.cdap.proto.id.ScheduleId;
 import co.cask.cdap.proto.id.StreamId;
 import co.cask.cdap.proto.id.StreamViewId;
 
@@ -70,6 +71,12 @@ final class MdsKey {
       keySplitter.skipString();
     } else if (type.equals(EntityIdKeyHelper.TYPE_MAP.get(ArtifactId.class))) {
       // skip namespace, name, version
+      keySplitter.skipString();
+      keySplitter.skipString();
+      keySplitter.skipString();
+    } else if (type.equals(EntityIdKeyHelper.TYPE_MAP.get(ScheduleId.class))) {
+      // skip namespace, appname, version, schedule
+      keySplitter.skipString();
       keySplitter.skipString();
       keySplitter.skipString();
       keySplitter.skipString();
