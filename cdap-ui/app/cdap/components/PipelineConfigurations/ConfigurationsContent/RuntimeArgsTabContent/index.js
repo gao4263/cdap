@@ -25,6 +25,7 @@ import ProvidedPopover from 'components/PipelineConfigurations/ConfigurationsCon
 import classnames from 'classnames';
 import isEmpty from 'lodash/isEmpty';
 import T from 'i18n-react';
+import {connect} from 'react-redux';
 require('./RuntimeArgsTabContent.scss');
 
 const PREFIX = 'features.PipelineConfigurations.RuntimeArgs';
@@ -70,7 +71,7 @@ const onPaste = (dataObj, index) => {
   updateKeyValueStore();
 };
 
-export default function RuntimeArgsTabContent({isHistoricalRun}) {
+function RuntimeArgsTabContent({isHistoricalRun}) {
   let runtimeArgs = PipelineConfigurationsStore.getState().runtimeArgs;
   let runtimeArgsObj = convertKeyValuePairsObjToMap(runtimeArgs);
   let noRuntimeArgs = isEmpty(runtimeArgsObj);
@@ -134,3 +135,13 @@ export default function RuntimeArgsTabContent({isHistoricalRun}) {
 RuntimeArgsTabContent.propTypes = {
   isHistoricalRun: PropTypes.bool
 };
+
+const mapStateToProps = (state) => {
+  return {
+    isHistoricalRun: state.pipelineVisualConfiguration.isHistoricalRun
+  };
+};
+
+const ConnectedRuntimeArgsTabContent = connect(mapStateToProps)(RuntimeArgsTabContent);
+
+export default ConnectedRuntimeArgsTabContent;
