@@ -24,7 +24,9 @@ import IconSVG from 'components/IconSVG';
 require('./ConfigurableTab.scss');
 const TabConfig = PropTypes.shape({
   name: PropTypes.string,
-  content: PropTypes.node
+  content: PropTypes.node,
+  contentClassName: PropTypes.string,
+  paneClassName: PropTypes.string
 });
 
 export default class ConfigurableTab extends Component {
@@ -100,17 +102,22 @@ export default class ConfigurableTab extends Component {
                   onClick={() => this.setTab(tab.id)}
                   activeTab={this.isActiveTab(tab.id)}
                 >
-                  <span className="fa-fw tab-header-icon">
-                    <IconSVG name={tab.icon} />
-                  </span>
+                {
+                  tab.icon ?
+                    <span className="fa-fw tab-header-icon">
+                      <IconSVG name={tab.icon} />
+                    </span>
+                  :
+                    null
+                }
                   <span title={tab.name}>{tab.name}</span>
                 </TabHead>
               );
             })}
           </TabHeaders>
-          <div className="tab-content active">
+          <div className={`tab-content active ${activeTab.contentClassName ? activeTab.contentClassName : ''}`}>
             <div
-              className="tab-pane active"
+              className={`tab-pane active ${activeTab.paneClassName ? activeTab.paneClassName : ''}`}
               tabId={activeTab.id}
             >
               {activeTab.content}
