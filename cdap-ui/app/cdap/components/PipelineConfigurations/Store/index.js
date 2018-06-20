@@ -59,17 +59,8 @@ const ACTIONS = {
   SET_NUM_RECORDS_PREVIEW: 'SET_NUM_RECORDS_PREVIEW',
   SET_PIPELINE_EDIT_STATUS: 'SET_PIPELINE_EDIT_STATUS',
   SET_MODELESS_OPEN_STATUS: 'SET_MODELESS_OPEN_STATUS',
+  SET_PIPELINE_VISUAL_CONFIGURATION: 'SET_PIPELINE_VISUAL_CONFIGURATION',
   RESET: 'RESET'
-};
-
-const TAB_OPTIONS = {
-  RUNTIME_ARGS: 'runtimeArgs',
-  PREVIEW_CONFIG: 'previewConfig',
-  PIPELINE_CONFIG: 'pipelineConfig',
-  ENGINE_CONFIG: 'engineConfig',
-  RESOURCES: 'resources',
-  ALERTS: 'alerts',
-  COMPUTECONFIG: 'computeConfig'
 };
 
 const BATCH_INTERVAL_RANGE = range(1, 61);
@@ -124,7 +115,15 @@ const DEFAULT_CONFIGURE_OPTIONS = {
   maxConcurrentRuns: 1,
   isMissingKeyValues: false,
   pipelineEdited: false,
-  modelessOpen: false
+  modelessOpen: false,
+
+  pipelineVisualConfiguration: {
+    isBatch: false,
+    isHistoricalRun: false,
+    isPreview: false,
+    isDetailView: false
+  }
+
 };
 
 const getCustomConfigFromProperties = (properties) => {
@@ -410,6 +409,14 @@ const configure = (state = DEFAULT_CONFIGURE_OPTIONS, action = defaultAction) =>
       };
     case ACTIONS.RESET:
       return DEFAULT_CONFIGURE_OPTIONS;
+    case ACTIONS.SET_PIPELINE_VISUAL_CONFIGURATION:
+      return {
+        ...state,
+        pipelineVisualConfiguration: {
+          ...state.pipelineVisualConfiguration,
+          ...action.payload.pipelineVisualConfiguration
+        }
+      };
     default:
       return state;
   }
@@ -424,7 +431,6 @@ const PipelineConfigurationsStore = createStore(
 export default PipelineConfigurationsStore;
 export {
   ACTIONS,
-  TAB_OPTIONS,
   BATCH_INTERVAL_RANGE,
   BATCH_INTERVAL_UNITS,
   NUM_EXECUTORS_OPTIONS,
