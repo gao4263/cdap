@@ -17,15 +17,63 @@
 /* Doing these imports for now, will remove once we have the js for these tabs */
 @import "./ConfigurationsContent/PreviewConfigTabContent/PreviewConfigTabContent.scss";
 @import "./ConfigurationsContent/AlertsTabContent/AlertsTabContent.scss";
+@import "../../styles/variables.scss";
 
 $modeless-width: 830px;
 $modeless-height: 496px;
 $top-panel-height: 54px;
 $right-position: -360px;
+$sidepanel-width: 170px;
 
 .pipeline-configurations-content {
   width: $modeless-width;
   height: $modeless-height;
   top: $top-panel-height;
   right: $right-position;
+
+  .cask-configurable-tab {
+    height: calc(100% - 60px); // .modeless-header height set at common.less :sigh:
+
+    .cask-tabs.vertical {
+      min-height: inherit;
+      max-height: inherit;
+
+      > div {
+        &:nth-child(2) {
+          width: calc(100% - $sidepanel-width);
+        }
+        &:first-child {
+          width: $sidepanel-width;
+          padding: 0;
+          background: transparent;
+          border-right: 1px solid $grey-05;
+        }
+
+        &.cask-tab-headers {
+          .cask-tab-head {
+            border-bottom: 1px solid $grey-05;
+            padding: 10px 10px 10px 20px;
+            &.active-tab {
+              color: $cdap-orange;
+              background: $grey-07;
+              border-left: 0;
+            }
+            span {
+              &.tab-header-icon {
+                margin: 0 5px;
+                .icon-sliders.icon-svg {
+                  transform: rotate(90deg);
+                }
+              }
+            }
+          }
+        }
+        &.tab-content {
+          .tab-pane {
+            width: 100%;
+          }
+        }
+      }
+    }
+  }
 }
