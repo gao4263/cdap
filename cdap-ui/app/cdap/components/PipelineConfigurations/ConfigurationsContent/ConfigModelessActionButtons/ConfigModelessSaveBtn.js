@@ -17,7 +17,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
-import IconSVG from 'components/IconSVG';
+import BtnWithLoading from 'components/BtnWithLoading';
 import T from 'i18n-react';
 
 const PREFIX = 'features.PipelineConfigurations.ActionButtons';
@@ -32,26 +32,13 @@ const mapStateToProps = (state, ownProps) => {
 
 const ConfigModelessSaveBtn = ({pipelineEdited, saveLoading, saveConfig}) => {
   return (
-    <button
-      className="btn btn-secondary"
-      disabled={saveLoading}
+    <BtnWithLoading
+      loading={saveLoading}
+      className="btn btn-primary"
       onClick={saveConfig.bind(this, pipelineEdited)}
-    >
-      {
-        saveLoading ?
-          (
-            <span>
-              {T.translate(`${PREFIX}.saving`)}
-              <IconSVG
-                name="icon-spinner"
-                className="fa-spin"
-              />
-             </span>
-          )
-        :
-          <span>{T.translate(`${PREFIX}.save`)}</span>
-      }
-    </button>
+      label={T.translate(`${PREFIX}.save`)}
+      disabled={saveLoading}
+    />
   );
 };
 

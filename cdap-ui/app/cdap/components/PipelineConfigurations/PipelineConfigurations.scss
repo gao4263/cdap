@@ -31,8 +31,18 @@ $sidepanel-width: 170px;
   top: $top-panel-height;
   right: $right-position;
 
-  .cask-configurable-tab {
+  .pipeline-config-tabs-wrapper {
     height: calc(100% - 60px); // .modeless-header height set at common.less :sigh:
+    position: relative;
+
+    .configuration-step-navigation {
+      position: absolute;
+      bottom: 40px;
+      left: 215px;
+    }
+  }
+  .cask-configurable-tab {
+    height: 100%;
 
     .cask-tabs.vertical {
       min-height: inherit;

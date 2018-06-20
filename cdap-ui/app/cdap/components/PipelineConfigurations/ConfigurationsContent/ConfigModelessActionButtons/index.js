@@ -26,7 +26,6 @@ import {
 import ConfigModelessSaveAndRunBtn from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons/ConfigModelessSaveAndRunBtn';
 import ConfigModelessSaveAndScheduleBtn from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons/ConfigModelessSaveAndScheduleBtn';
 import ConfigModelessSaveBtn from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons/ConfigModelessSaveBtn';
-import ConfigModelessRuntimeArgsCount from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons/ConfigModelessRuntimeArgsCount';
 import ConfigModelessCopyRuntimeArgsBtn from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons/ConfigModelessCopyRuntimeArgsBtn';
 import {Observable} from 'rxjs/Observable';
 
@@ -42,7 +41,6 @@ export default class ConfigModelessActionButtons extends Component {
 
   static propTypes = {
     onClose: PropTypes.func,
-    activeTab: PropTypes.string,
     action: PropTypes.string,
     isHistoricalRun: PropTypes.bool
   };
@@ -147,10 +145,6 @@ export default class ConfigModelessActionButtons extends Component {
             :
               null
           }
-          <ConfigModelessRuntimeArgsCount
-            activeTab={this.props.activeTab}
-            isHistoricalRun={this.props.isHistoricalRun}
-          />
         </div>
       </div>
     );

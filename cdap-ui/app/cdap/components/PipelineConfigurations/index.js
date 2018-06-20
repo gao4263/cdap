@@ -20,6 +20,7 @@ import PropTypes from 'prop-types';
 import {Observable} from 'rxjs/Observable';
 import {isDescendant} from 'services/helpers';
 import PipelineConfigurationsStore, {ACTIONS as PipelineConfigurationsActions} from 'components/PipelineConfigurations/Store';
+import ConfigModelessActionButtons from 'components/PipelineConfigurations/ConfigurationsContent/ConfigModelessActionButtons';
 import IconSVG from 'components/IconSVG';
 import T from 'i18n-react';
 import ConfigurableTab from 'components/ConfigurableTab';
@@ -132,7 +133,13 @@ export default class PipelineConfigurations extends Component {
           ref={(ref) => this.configModeless = ref}
         >
           {this.renderHeader()}
-          <ConfigurableTab tabConfig={TabConfig} />
+          <div className="pipeline-config-tabs-wrapper">
+            <ConfigurableTab tabConfig={TabConfig} />
+            <ConfigModelessActionButtons
+              onClose={this.props.onClose}
+              action={''}
+            />
+          </div>
         </div>
       </Provider>
     );
